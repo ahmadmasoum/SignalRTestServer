@@ -2,7 +2,7 @@
 using SignalRTestServer;
 
 // Banner
-string timestamp = "2025-04-14 08:36:59"; // Current UTC time
+string timestamp = DateTime.UtcNow.ToString("u");
 string user = "ahmadmasoum";
 Console.WriteLine($"Starting SignalR Test Server (.NET 9)...");
 Console.WriteLine($"Current Date and Time (UTC): {timestamp}");
@@ -22,36 +22,33 @@ builder.Services.AddCors(options =>
                .AllowCredentials());
 });
 
-// Configure HTTPS
-builder.WebHost.UseUrls("https://0.0.0.0:5001");
+// Configure HTTPS and HTTP
+builder.WebHost.UseUrls("https://0.0.0.0:5001", "http://0.0.0.0:5000");
 
 var app = builder.Build();
 
 // Configure middleware pipeline
 app.UseCors("CorsPolicy");
-app.UseHttpsRedirection();
 
-// Add a healthcheck endpoint to help with testing
-app.MapGet("/healthcheck", () => "Server is running");
+// Add health check endpoint for certificate testing
+app.MapGet("/healthcheck", () => $"SignalR Test Server is running. Current time: {DateTime.UtcNow}");
 
 app.MapHub<TestHub>("/testhub");
 
 // Start server
-var url = "https://0.0.0.0:5001";
-app.Urls.Clear();
-app.Urls.Add(url);
-
-// Start the web server in a background task
-var serverTask = app.StartAsync();
-
-Console.WriteLine($"SignalR Server running at {url}/testhub");
-Console.WriteLine($"Health check available at {url}/healthcheck");
+Console.WriteLine($"SignalR Server running at:");
+Console.WriteLine($"  - HTTP:  http://0.0.0.0:5000/testhub");
+Console.WriteLine($"  - HTTPS: https://0.0.0.0:5001/testhub");
+Console.WriteLine($"Health check available at /healthcheck endpoint");
 Console.WriteLine("Available commands:");
 Console.WriteLine("  broadcast <message> - Send message to all connected clients");
 Console.WriteLine("  clients - List connected clients");
 Console.WriteLine("  exit - Stop the server and exit");
 
 var hubContext = app.Services.GetRequiredService<IHubContext<TestHub>>();
+
+// Start the web server in a background task
+var serverTask = app.RunAsync();
 
 // Command loop
 while (true)

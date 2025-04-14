@@ -1,0 +1,406 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SignalR Test Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 90vh;
+        }
+        #status {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .disconnected {
+            background-color: #ffcccc;
+            color: #cc0000;
+        }
+        .connecting {
+            background-color: #ffffcc;
+            color: #999900;
+        }
+        .connected {
+            background-color: #ccffcc;
+            color: #009900;
+        }
+        #messagesList {
+            flex: 1;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 10px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            background-color: #f9f9f9;
+        }
+        .input-group {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px 0 0 5px;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #0078d7;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 0 5px 5px 0;
+        }
+        button:hover {
+            background-color: #005a9e;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .message {
+            margin-bottom: 5px;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        .server {
+            background-color: #e6f7ff;
+        }
+        .client {
+            background-color: #f0f0f0;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+        #serverUrl {
+            flex: 1;
+        }
+        .timestamp {
+            color: #666;
+            font-size: 0.8em;
+        }
+        #troubleshooting {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+        }
+        .option-group {
+            margin-bottom: 10px;
+        }
+        label {
+            margin-left: 5px;
+        }
+        .clear-button {
+            background-color: #888;
+            border-radius: 5px;
+            margin-left: 10px;
+        }
+        .clear-button:hover {
+            background-color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SignalR Test Client</h1>
+        
+        <div id="troubleshooting">
+            <div class="option-group">
+                <input type="checkbox" id="skipNegotiation" checked> 
+                <label for="skipNegotiation">Skip Negotiation</label>
+                
+                <input type="checkbox" id="useWebSockets" checked> 
+                <label for="useWebSockets">Use WebSockets</label>
+                
+                <button id="testConnectionButton">Test Connection</button>
+                <button id="clearButton" class="clear-button">Clear Messages</button>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <input type="text" id="serverUrl" value="https://localhost:5001/testhub" placeholder="SignalR Hub URL" />
+            <button id="connectButton">Connect</button>
+            <button id="disconnectButton" disabled>Disconnect</button>
+        </div>
+        
+        <div id="status" class="disconnected">Disconnected</div>
+        
+        <div id="messagesList"></div>
+        
+        <div class="input-group">
+            <input type="text" id="messageInput" placeholder="Enter message..." disabled />
+            <button id="sendButton" disabled>Send</button>
+        </div>
+        
+        <div class="input-group">
+            <input type="text" id="echoInput" placeholder="Enter echo message..." disabled />
+            <button id="echoButton" disabled>Echo</button>
+        </div>
+    </div>
+
+    <!-- SignalR client library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
+    
+    <script>
+        // Elements
+        const connectButton = document.getElementById('connectButton');
+        const disconnectButton = document.getElementById('disconnectButton');
+        const serverUrlInput = document.getElementById('serverUrl');
+        const statusDiv = document.getElementById('status');
+        const messagesList = document.getElementById('messagesList');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const echoInput = document.getElementById('echoInput');
+        const echoButton = document.getElementById('echoButton');
+        const skipNegotiationCheckbox = document.getElementById('skipNegotiation');
+        const useWebSocketsCheckbox = document.getElementById('useWebSockets');
+        const clearButton = document.getElementById('clearButton');
+        const testConnectionButton = document.getElementById('testConnectionButton');
+        
+        // SignalR connection
+        let connection;
+        
+        // Update UI to show connection status
+        function updateStatus(state) {
+            statusDiv.className = state;
+            
+            switch(state) {
+                case 'disconnected':
+                    statusDiv.innerText = 'Disconnected';
+                    connectButton.disabled = false;
+                    disconnectButton.disabled = true;
+                    messageInput.disabled = true;
+                    sendButton.disabled = true;
+                    echoInput.disabled = true;
+                    echoButton.disabled = true;
+                    serverUrlInput.disabled = false;
+                    skipNegotiationCheckbox.disabled = false;
+                    useWebSocketsCheckbox.disabled = false;
+                    break;
+                case 'connecting':
+                    statusDiv.innerText = 'Connecting...';
+                    connectButton.disabled = true;
+                    disconnectButton.disabled = true;
+                    messageInput.disabled = true;
+                    sendButton.disabled = true;
+                    echoInput.disabled = true;
+                    echoButton.disabled = true;
+                    serverUrlInput.disabled = true;
+                    skipNegotiationCheckbox.disabled = true;
+                    useWebSocketsCheckbox.disabled = true;
+                    break;
+                case 'connected':
+                    statusDiv.innerText = 'Connected';
+                    connectButton.disabled = true;
+                    disconnectButton.disabled = false;
+                    messageInput.disabled = false;
+                    sendButton.disabled = false;
+                    echoInput.disabled = false;
+                    echoButton.disabled = false;
+                    serverUrlInput.disabled = true;
+                    skipNegotiationCheckbox.disabled = true;
+                    useWebSocketsCheckbox.disabled = true;
+                    break;
+            }
+        }
+        
+        // Clear messages
+        clearButton.addEventListener('click', () => {
+            messagesList.innerHTML = '';
+            addMessage('System', 'Messages cleared', true);
+        });
+        
+        // Add message to the message list
+        function addMessage(sender, message, isServer = false) {
+            const timestamp = new Date().toLocaleTimeString();
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${isServer ? 'server' : 'client'}`;
+            messageElement.innerHTML = `
+                <span class="timestamp">[${timestamp}]</span>
+                <strong>${sender}:</strong> ${message}
+            `;
+            messagesList.appendChild(messageElement);
+            messagesList.scrollTop = messagesList.scrollHeight;
+        }
+        
+        // Test server connectivity
+        async function testConnection() {
+            const url = new URL(serverUrlInput.value.trim());
+            const baseUrl = `${url.protocol}//${url.hostname}:${url.port}/healthcheck`;
+            
+            addMessage('System', `Testing server connectivity: ${baseUrl}`, true);
+            
+            try {
+                const response = await fetch(baseUrl);
+                if (response.ok) {
+                    const text = await response.text();
+                    addMessage('System', `Server is accessible: ${text}`, true);
+                } else {
+                    addMessage('System', `Server returned error: ${response.status} ${response.statusText}`, true);
+                }
+            } catch (err) {
+                addMessage('System', `Connection test failed: ${err.message}`, true);
+                addMessage('System', 'If you see a certificate error, please open the server URL directly in your browser first and accept the certificate.', true);
+            }
+        }
+        
+        testConnectionButton.addEventListener('click', testConnection);
+        
+        // Connect to SignalR Hub
+        async function connect() {
+            const hubUrl = serverUrlInput.value.trim();
+            if (!hubUrl) {
+                alert('Please enter a valid hub URL');
+                return;
+            }
+            
+            updateStatus('connecting');
+            addMessage('System', 'Connecting to SignalR Hub...', true);
+            
+            // Transport config
+            const transportType = useWebSocketsCheckbox.checked ? 
+                signalR.HttpTransportType.WebSockets : 
+                signalR.HttpTransportType.LongPolling;
+            
+            // Create connection
+            connection = new signalR.HubConnectionBuilder()
+                .withUrl(hubUrl, {
+                    skipNegotiation: skipNegotiationCheckbox.checked,
+                    transport: transportType
+                })
+                .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
+                .configureLogging(signalR.LogLevel.Information)
+                .build();
+                
+            // Set up message handler
+            connection.on('ReceiveMessage', (user, message) => {
+                addMessage(user, message, user === 'Server');
+            });
+            
+            // Set up echo handler
+            connection.on('EchoResponse', (message) => {
+                addMessage('Echo Response', message, true);
+            });
+            
+            // Set up connection state handlers
+            connection.onreconnecting(error => {
+                updateStatus('connecting');
+                addMessage('System', `Connection lost. Reconnecting: ${error ? error.message : 'Unknown error'}`, true);
+            });
+            
+            connection.onreconnected(connectionId => {
+                updateStatus('connected');
+                addMessage('System', `Reconnected with ID: ${connectionId}`, true);
+            });
+            
+            connection.onclose(error => {
+                updateStatus('disconnected');
+                addMessage('System', `Connection closed: ${error ? error.message : 'Connection closed normally'}`, true);
+            });
+            
+            // Start connection
+            try {
+                await connection.start();
+                updateStatus('connected');
+                addMessage('System', `Connected successfully with ID: ${connection.connectionId}`, true);
+                addMessage('System', `Using: ${useWebSocketsCheckbox.checked ? 'WebSockets' : 'Long Polling'} with${skipNegotiationCheckbox.checked ? '' : 'out'} negotiation skipping`, true);
+            } catch (err) {
+                updateStatus('disconnected');
+                addMessage('System', `Connection failed: ${err}`, true);
+                
+                // Provide troubleshooting advice
+                addMessage('System', 'Troubleshooting suggestions:', true);
+                addMessage('System', '1. Click "Test Connection" to check server accessibility', true);
+                addMessage('System', '2. Try unchecking "Skip Negotiation" if checked, or vice versa', true);
+                addMessage('System', '3. Try unchecking "Use WebSockets" to use Long Polling instead', true);
+                addMessage('System', '4. Make sure to open the server URL in your browser first to accept any certificate warnings', true);
+                
+                console.error(err);
+            }
+        }
+        
+        // Disconnect from SignalR Hub
+        async function disconnect() {
+            if (connection) {
+                try {
+                    await connection.stop();
+                    addMessage('System', 'Disconnected from server', true);
+                } catch (err) {
+                    console.error(err);
+                    addMessage('System', `Error during disconnection: ${err}`, true);
+                }
+                updateStatus('disconnected');
+            }
+        }
+        
+        // Send a message
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+            
+            if (connection && connection.state === signalR.HubConnectionState.Connected) {
+                try {
+                    await connection.invoke('SendMessage', 'JavaScript Client', message);
+                    messageInput.value = '';
+                } catch (err) {
+                    console.error(err);
+                    addMessage('System', `Error sending message: ${err}`, true);
+                }
+            } else {
+                addMessage('System', 'Not connected to server', true);
+            }
+        }
+        
+        // Send an echo message
+        async function sendEcho() {
+            const message = echoInput.value.trim();
+            if (!message) return;
+            
+            if (connection && connection.state === signalR.HubConnectionState.Connected) {
+                try {
+                    await connection.invoke('Echo', message);
+                    echoInput.value = '';
+                } catch (err) {
+                    console.error(err);
+                    addMessage('System', `Error sending echo: ${err}`, true);
+                }
+            } else {
+                addMessage('System', 'Not connected to server', true);
+            }
+        }
+        
+        // Event listeners
+        connectButton.addEventListener('click', connect);
+        disconnectButton.addEventListener('click', disconnect);
+        
+        sendButton.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+        
+        echoButton.addEventListener('click', sendEcho);
+        echoInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendEcho();
+        });
+        
+        // Initial status update
+        updateStatus('disconnected');
+        addMessage('System', 'SignalR Test Client initialized. Click Connect to start.', true);
+        addMessage('System', 'Recommended: Click "Test Connection" first to verify server accessibility', true);
+    </script>
+</body>
+</html>
